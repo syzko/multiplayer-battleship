@@ -16,19 +16,36 @@ namespace Week6
 {
     internal class BluePlayer : IPlayer
     {
-        private static int _nextGuess = 0; 
+        private static int _nextGuess = 0;
 
         private int _index;
         private int _gridSize;
-
-        //stack for ship placement AI
-        private Stack<Ship> shipsStack { get; set; }
 
         //grid for ship placement AI
         private string[,] spaces { get; set; }
 
         //direction for ship placement AI
         private Direction direction { get; set; }
+
+        //list for attack guesses
+        private static readonly List<Position> Guesses = new List<Position>();
+
+        //random generators for AI
+        private static readonly Random rand = new Random();
+        private static readonly Random rand2 = new Random();
+
+        // added fields and list for our algorithms
+        private static int lastX, lastY;
+        private static Position lastPosition = new Position(lastX, lastY);
+        private static readonly List<Position> allGridPlays = new List<Position>();
+        private static bool lastShotHit = false;
+        private static bool lastShotSank = false;
+
+        // just required for test guess code
+        private static bool firstPassComplete = false;
+        private enum playDirection { Vertical, Horizontal }
+        private playDirection playdirection;
+
 
         public BluePlayer(string name)
         {
@@ -50,137 +67,223 @@ namespace Week6
                 }
             }
 
-
-            //variable for boat length
-            Random rand = new Random();
-
-            //variable for boat length
-            int boatLength = 0;
-
-            //variable to exit loop when stack is out of boats
-            bool emptyStack = false;
+            //variable for placement loop
+            bool okayMove = false;
 
             //loop to push the desired ships on a stack
             foreach (var ship in ships._ships)
             {
-          
-                //shipsStack.Push(ship); //this throws an exception for some reason
+                okayMove = false;
 
+                //loop to place ships until gone
+                while (!okayMove)
+                {
+                    //counter to verify that there are no collisions
+                    int goodSpace = 0;
+
+                    //generates random cooridinates
+                    int x = rand.Next(1, 10);
+                    int y = rand.Next(1, 10);
+
+                    //generates a random number for use in assigning direction
+                    int directionNumber = rand.Next(1, 10);
+
+                    //assigns a direction
+                    if (directionNumber > 0 && directionNumber < 6)
+                    {
+                        direction = Direction.Horizontal;
+                    }
+                    else
+                    {
+                        direction = Direction.Vertical;
+                    }
+
+
+
+                    //checks for direction and valid starting coordinate
+                    if (spaces[y, x] == "good" && direction == Direction.Horizontal)
+                    {
+                        //check to make sure variables stay within scope
+                        if (y + ship.Length < _gridSize)
+                        {
+                            //checks for more valid spaces
+                            for (int i = 0; i < ship.Length; i++)
+                            {
+                                if (spaces[y + i, x] == "good")
+                                {
+                                    goodSpace++;
+                                }
+                            }
+                        }
+
+                        //if no collisions places boat in grid, adds to the ship's position array, and pops it out of the stack
+                        if (goodSpace == ship.Length)
+                        {
+                            ship.Place(new Position(y, x), Direction.Horizontal);
+
+                            for (int i = 0; i < ship.Length; i++)
+                            {
+                                spaces[y + i, x] = "used";
+                            }
+
+                            okayMove = true;
+                        }
+                    }
+
+                    //same as the last block of code, but for different direction
+                    else if (spaces[y, x] == "good" && direction == Direction.Vertical)
+                    {
+                        //check to make sure variables stay within scope
+                        if (x + ship.Length < _gridSize)
+                        {
+                            //checks for more valid spaces
+                            for (int i = 0; i < ship.Length; i++)
+                            {
+                                if (spaces[y, x + i] == "good")
+                                {
+                                    goodSpace++;
+                                }
+                            }
+                        }
+
+                        //if no collisions places boat in grid, adds to the ship's position array, and pops it out of the stack
+                        if (goodSpace == ship.Length)
+                        {
+                            ship.Place(new Position(y, x), Direction.Vertical);
+
+                            for (int i = 0; i < ship.Length; i++)
+                            {
+                                spaces[y, x + i] = "used";
+                            }
+
+                            okayMove = true;
+                        }
+                    }
+                    
+                }
             }
 
-            //loop to place ships until gone
-            while (!emptyStack)
+        }
+
+        private void GenerateGuesses()
+        {
+            //We want all instances of RandomPlayer to share the same pool of guesses
+            //So they don't repeat each other.
+
+            //We need to populate the guesses list, but not for every instance - so we only do it if the set is missing some guesses
+            if (Guesses.Count < _gridSize * _gridSize)
             {
-                //counter to verify that there are no collisions
-                int goodSpace = 0;
-
-                //assigns boatLength variable based on ship in the Stack
-                boatLength = shipsStack.Peek().Length;
-
-                //generates random cooridinates
-                int x = rand.Next(1, 10);
-                int y = rand.Next(1, 10);
-
-                //generates a random number for use in assigning direction
-                int directionNumber = rand.Next(1, 10);
-
-                //assigns a direction
-                if(directionNumber > 0 && directionNumber < 6)
+                Guesses.Clear();
+                for (int x = 0; x < _gridSize; x++)
                 {
-                    direction = Direction.Horizontal;
+                    for (int y = 0; y < _gridSize; y++)
+                    {
+                        Guesses.Add(new Position(x, y));
+                    }
+                }
+            }
+        }
+
+        // Test code to move in a pattern vertical or horizontal across the grid
+        // To use this, it must have comparison code added to prevent repeat guesses
+        public Position GetAttackPosition()
+        {
+            int prevX, prevY;
+            prevX = lastPosition.X;
+            prevY = lastPosition.Y;
+            Random rand3 = new Random();
+            Random rand4 = new Random();
+            Position myGuess = new Position(0, 0);
+            if (!firstPassComplete)
+            {
+                playdirection = (Index % 2 == 0) ? playDirection.Horizontal : playDirection.Vertical;
+                myGuess.X = rand3.Next(0, _gridSize);
+                myGuess.Y = rand4.Next(0, _gridSize);
+                firstPassComplete = true;
+            }
+            else
+            {
+                if (firstPassComplete && playdirection == playDirection.Horizontal)
+                {
+                    myGuess.X = (lastPosition.X <= _gridSize - 3) ? lastPosition.X + 2
+                        : (lastPosition.X == _gridSize - 2) ? 0 : 1;
+                    myGuess.Y = (lastPosition.X < _gridSize - 2) ? lastPosition.Y : lastPosition.Y + 1;
+                    myGuess.Y = (myGuess.Y <= _gridSize - 1) ? myGuess.Y : 0;
                 }
                 else
                 {
-                    direction = Direction.Vertical;
-                }
-
-                
-
-                //checks for direction and valid starting coordinate
-                if (spaces[y,x] == "good" && direction == Direction.Horizontal)
-                {
-                    //check to make sure variables stay within scope
-                    if (y + boatLength < 11)
-                    {
-                        //checks for more valid spaces
-                        for (int i = 0; i < boatLength; i++)
-                        {
-                            if (spaces[y + i, x] == "good")
-                            {
-                                goodSpace++;
-                            }
-                        }
-                    }
-
-                    //if no collisions places boat in grid, adds to the ship's position array, and pops it out of the stack
-                    if (goodSpace == boatLength)
-                    {
-                        shipsStack.Peek().Place(new Position(y, x), Direction.Horizontal);
-
-                        for (int i = 0; i < boatLength; i++)
-                        {
-                            spaces[y + i, x] = "used";
-                        }
-
-                        shipsStack.Pop();
-                    }
-                }
-
-                //same as the last block of code, but for different direction
-                else if (spaces[y, x] == "good" && direction == Direction.Vertical)
-                {
-                    //check to make sure variables stay within scope
-                    if (x + boatLength < 11)
-                    {
-                        //checks for more valid spaces
-                        for (int i = 0; i < boatLength; i++)
-                        {
-                            if (spaces[y + i, x] == "good")
-                            {
-                                goodSpace++;
-                            }
-                        }
-                    }
-
-                    //if no collisions places boat in grid, adds to the ship's position array, and pops it out of the stack
-                    if (goodSpace == boatLength)
-                    {
-                        shipsStack.Peek().Place(new Position(y, x), Direction.Horizontal);
-
-                        for (int i = 0; i < boatLength; i++)
-                        {
-                            spaces[y, x + i] = "used";
-                        }
-
-                        shipsStack.Pop();
-                    }
-                }
-
-
-                //check for empty stack to exit the loop
-                if (shipsStack.Count() == 0)
-                {
-                    emptyStack = true;
+                    myGuess.X = (lastPosition.Y < _gridSize - 1) ? lastPosition.X : lastPosition.X + 1;
+                    myGuess.Y = (lastPosition.Y <= _gridSize - 3) ? lastPosition.Y + 2
+                        : (lastPosition.Y < _gridSize - 2) ? lastPosition.Y + 0 : 1;
+                    myGuess.X = (myGuess.X <= _gridSize - 1) ? myGuess.X : 0;
                 }
             }
 
-           
+            while (CheckGridAvailable(myGuess))
+            {
+                if (playdirection == playDirection.Horizontal)
+                {
+                    myGuess.X++;
+                    if (myGuess.X > _gridSize - 1)
+                    {
+                        myGuess.X = 0;
+                        myGuess.Y++;
+                        if (myGuess.Y > _gridSize - 1)
+                            myGuess.Y = 0;
+                    }
+                }
+                else
+                {
+                    myGuess.Y++;
+                    if (myGuess.Y > _gridSize - 1)
+                    {
+                        myGuess.Y = 0;
+                        myGuess.X++;
+                        if (myGuess.X > _gridSize - 1)
+                            myGuess.X = 0;
+                    }
+                }
+            }
+            lastPosition = myGuess;
+            return myGuess;
         }
-
-        public Position GetAttackPosition()
+        bool gridUsed = false;
+        private bool CheckGridAvailable(Position p)
         {
-            Random rand = new Random();
-            //A *very* naive guessing algorithm that simply starts at 0, 0 and guess each square in order
-            //All 'DumbPlayers' share the counter so they won't guess the same one
-            //But we don't check to make sure the square has not been guessed before
-            var pos = new Position(_nextGuess % _gridSize, (_nextGuess / _gridSize));
-            _nextGuess++;
-            return pos;
+            foreach (Position pos in allGridPlays)
+            {
+
+                gridUsed = (p.X == pos.X && p.Y == pos.Y) ? true : false;
+                if (gridUsed) break;
+            }
+            return gridUsed;
         }
 
+        // IPlayer SetAttackResults method implemented to read values from all plays
+        // by all players to get data required for our algorithm
         public void SetAttackResults(List<AttackResult> results)
         {
-            //DumbPlayer does nothing with these results - its going to keep making dumb guesses
+            int _x = 0;
+            int _y = 0;
+            int _playerIndex;
+            ShipTypes _shipType;
+            Position _position;
+            lastShotHit = false;
+            lastShotSank = false;
+            foreach (var result in results)
+            {
+                _playerIndex = result.PlayerIndex;
+                _position = result.Position;
+                if (_position != null)
+                {
+                    _x = _position.X;
+                    _y = _position.Y;
+                }
+                lastShotHit = (result.ResultType == AttackResultType.Hit) ? true : false;
+                lastShotSank = (result.ResultType == AttackResultType.Sank) ? true : false;
+                _shipType = result.SunkShip;
+            }
+            allGridPlays.Add(new Position(_x, _y));
         }
 
         public string Name { get; }
