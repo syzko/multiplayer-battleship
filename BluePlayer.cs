@@ -22,12 +22,6 @@ namespace Week6
         //direction for ship placement AI
         private Direction direction { get; set; }
 
-        private Ship thisShip { get; set; }
-
-
-
-
-
         public BluePlayer(string name)
         {
             Name = name;
@@ -61,8 +55,8 @@ namespace Week6
             //loop to push the desired ships on a stack
             foreach (var ship in ships._ships)
             {
-                thisShip = ship;
-                shipsStack.Push(thisShip);
+          
+                //shipsStack.Push(ship); //this throws an exception for some reason
 
             }
 
